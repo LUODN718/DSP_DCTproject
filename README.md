@@ -1,4 +1,4 @@
-# PyTorch Study: Imagenette + DCT
+# PyTorch: Imagenette + DCT
 
 一个用于学习 PyTorch 训练流程和图像频域处理的小项目，包含：
 
