@@ -3,6 +3,5 @@ __pycache__/
 *.pyc
 
 # dataset and generated artifacts
-imagenette2-160/
 *.pt
 outputs/
