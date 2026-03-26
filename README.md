@@ -9,6 +9,7 @@
 
 - `train_classifier.py`：分类模型训练脚本（支持可选 DCT 预处理）
 - `visualize_spectrum.py`：频域可视化脚本
+- `model_use.py`：加载 `tiny_imagenette.pt` 做单张图片推理（中文类别名输出）
 - `requirements.txt`：Python 依赖
 - `imagenette2-160/`：训练与验证数据集
 
@@ -56,6 +57,27 @@ python train_classifier.py --use_dct --dct_block 8
 
 - `tiny_imagenette.pt`（常规训练）
 - `tiny_imagenette_dct8.pt`（DCT 训练）
+
+## 模型推理
+
+`model_use.py` 会加载 `tiny_imagenette.pt` 并输出中文类别名。使用前先把脚本中的图片路径改成你自己的本地图片：
+
+```python
+img = Image.open("本地图片路径").convert("RGB")
+```
+
+运行命令：
+
+```bash
+source .venv/bin/activate
+python model_use.py
+```
+
+示例输出：
+
+```text
+预测类别: 英国史宾格犬 (n02102040)
+```
 
 ## 频域可视化
 
