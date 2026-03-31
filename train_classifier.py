@@ -106,29 +106,91 @@ class BlockDCTTransform:
         return out
 
 
+class BlockDCTLowFreqReconstructTransform:
+    """
+    把 DCT 当成“独立预处理模块”：
+    1) 逐块 DCT
+    2) 仅保留每个块左上角 keep x keep 低频
+    3) 逐块 IDCT 重建回空间域
+    4) 用和 baseline 一样的 ImageNet 归一化
+    输出仍是 3 通道张量，因此 CNN 结构无需修改。
+    """
+
+    def __init__(self, block_size: int = 8, keep: int = 4) -> None:
+        self.block_size = int(block_size)
+        self.keep = int(keep)
+        if self.keep <= 0 or self.keep > self.block_size:
+            raise ValueError(f"keep 需在 [1, block_size]，但得到 keep={self.keep}, block_size={self.block_size}")
+        self._build_dct_matrices()
+        self.mean = torch.tensor((0.485, 0.456, 0.406), dtype=torch.float32).view(3, 1, 1)
+        self.std = torch.tensor((0.229, 0.224, 0.225), dtype=torch.float32).view(3, 1, 1)
+
+    def _build_dct_matrices(self) -> None:
+        N = self.block_size
+        C = torch.zeros(N, N, dtype=torch.float32)
+        for k in range(N):
+            alpha = (1.0 / N) ** 0.5 if k == 0 else (2.0 / N) ** 0.5
+            for n in range(N):
+                angle = math.pi * (n + 0.5) * k / N
+                C[k, n] = alpha * math.cos(angle)
+        self.C = C
+        self.C_t = C.t()
+
+    def __call__(self, img) -> torch.Tensor:
+        x = TF.to_tensor(img).to(torch.float32)  # [ch, H, W], range [0,1]
+        ch, H, W = x.shape
+        N = self.block_size
+        if H % N != 0 or W % N != 0:
+            raise ValueError(f"DCT 需要 H/W 能被 block_size 整除，但得到 H={H}, W={W}, block_size={N}")
+
+        Hb, Wb = H // N, W // N
+        blocks = x.view(ch, Hb, N, Wb, N).permute(0, 1, 3, 2, 4).contiguous()
+        blocks2 = blocks.view(ch * Hb * Wb, N, N)
+
+        dct = torch.matmul(torch.matmul(self.C, blocks2), self.C_t)
+        low = torch.zeros_like(dct)
+        k = self.keep
+        low[:, :k, :k] = dct[:, :k, :k]
+        recon = torch.matmul(torch.matmul(self.C_t, low), self.C)
+
+        out = recon.view(ch, Hb, Wb, N, N).permute(0, 1, 3, 2, 4).contiguous().view(ch, H, W)
+        out = out.clamp(0.0, 1.0)
+        out = (out - self.mean) / self.std
+        return out
+
+
 def make_dataloaders(
     data_root: pathlib.Path,
     batch_size: int,
     num_workers: int,
     use_dct: bool,
     dct_block: int,
+    dct_mode: str,
+    dct_keep: int,
 ) -> tuple[DataLoader, DataLoader, list[str]]:
     img_size = 160  # imagenette2-160；保证能被 dct_block 整除
     if use_dct and img_size % dct_block != 0:
         raise ValueError(f"img_size={img_size} 需要能被 dct_block={dct_block} 整除")
 
     if use_dct:
+        if dct_mode == "coeff":
+            dct_tfm = BlockDCTTransform(block_size=dct_block, standardize=True)
+        elif dct_mode == "recon_lowfreq":
+            dct_tfm = BlockDCTLowFreqReconstructTransform(block_size=dct_block, keep=dct_keep)
+        else:
+            raise ValueError(f"不支持的 dct_mode: {dct_mode}")
+
         train_tfms = transforms.Compose(
             [
                 transforms.Resize((img_size, img_size)),
                 transforms.RandomHorizontalFlip(),
-                BlockDCTTransform(block_size=dct_block, standardize=True),
+                dct_tfm,
             ]
         )
         val_tfms = transforms.Compose(
             [
                 transforms.Resize((img_size, img_size)),
-                BlockDCTTransform(block_size=dct_block, standardize=True),
+                dct_tfm,
             ]
         )
     else:
@@ -251,7 +313,7 @@ def print_sample_predictions(
         print(f"  [{ok}]  真实: {name_t}  ->  预测: {name_p}")
 
 
-def train(epochs: int, use_dct: bool, dct_block: int) -> None:
+def train(epochs: int, use_dct: bool, dct_block: int, dct_mode: str, dct_keep: int) -> None:
     data_root = pathlib.Path(__file__).resolve().parent / "imagenette2-160"
     if not (data_root / "train").is_dir():
         raise SystemExit(f"找不到训练集目录: {data_root / 'train'}")
@@ -272,6 +334,8 @@ def train(epochs: int, use_dct: bool, dct_block: int) -> None:
         num_workers=num_workers,
         use_dct=use_dct,
         dct_block=dct_block,
+        dct_mode=dct_mode,
+        dct_keep=dct_keep,
     )
     num_classes = len(idx_to_folder)
     print(f"类别数: {num_classes}（示例: {idx_to_folder[0]} -> {CLASS_NAMES.get(idx_to_folder[0], '?')}）")
@@ -331,5 +395,24 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=5, help="训练轮数")
     parser.add_argument("--use_dct", action="store_true", help="在输入前做 block DCT 预处理")
     parser.add_argument("--dct_block", type=int, default=8, help="block DCT 的块大小，默认 8x8")
+    parser.add_argument(
+        "--dct_mode",
+        type=str,
+        choices=["coeff", "recon_lowfreq"],
+        default="coeff",
+        help="DCT 模式：coeff=直接用 DCT 系数；recon_lowfreq=仅保留低频后回到空间域",
+    )
+    parser.add_argument(
+        "--dct_keep",
+        type=int,
+        default=4,
+        help="当 dct_mode=recon_lowfreq 时，每块保留左上角 keep x keep 低频",
+    )
     args = parser.parse_args()
-    train(epochs=args.epochs, use_dct=args.use_dct, dct_block=args.dct_block)
+    train(
+        epochs=args.epochs,
+        use_dct=args.use_dct,
+        dct_block=args.dct_block,
+        dct_mode=args.dct_mode,
+        dct_keep=args.dct_keep,
+    )

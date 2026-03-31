@@ -9,7 +9,7 @@
 
 - `train_classifier.py`：分类模型训练脚本（支持可选 DCT 预处理）
 - `visualize_spectrum.py`：频域可视化脚本
-- `model_use.py`：加载 `tiny_imagenette.pt` 做单张图片推理（中文类别名输出）
+- `test.py`：加载 `tiny_imagenette.pt` 做单张图片推理（中文类别名输出）
 - `requirements.txt`：Python 依赖
 - `imagenette2-160/`：训练与验证数据集
 
@@ -49,8 +49,14 @@ python train_classifier.py --epochs 1
 
 ### 2) 使用 Block DCT 预处理训练
 
+`train_classifier.py` 中，DCT 作为独立预处理模块，CNN 结构保持不变。可选两种模式：
+
+- `coeff`：直接使用 DCT 系数域输入
+- `recon_lowfreq`：仅保留低频后 IDCT 回空间域输入
+
 ```bash
-python train_classifier.py --use_dct --dct_block 8
+python train_classifier.py --use_dct --dct_mode coeff --dct_block 8 --epochs 10
+python train_classifier.py --use_dct --dct_mode recon_lowfreq --dct_block 8 --dct_keep 4 --epochs 10
 ```
 
 训练后会在根目录生成权重文件：
@@ -60,7 +66,7 @@ python train_classifier.py --use_dct --dct_block 8
 
 ## 模型推理
 
-`model_use.py` 会加载 `tiny_imagenette.pt` 并输出中文类别名。使用前先把脚本中的图片路径改成你自己的本地图片：
+`test.py` 会加载 `tiny_imagenette.pt` 并输出中文类别名。使用前先把脚本中的图片路径改成你自己的本地图片：
 
 ```python
 img = Image.open("本地图片路径").convert("RGB")
@@ -70,7 +76,7 @@ img = Image.open("本地图片路径").convert("RGB")
 
 ```bash
 source .venv/bin/activate
-python model_use.py
+python test.py
 ```
 
 示例输出：
