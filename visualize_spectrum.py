@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DSP 可视化模块：原图、FFT 幅度谱、8x8 block DCT 热力图、低频保留重建图。
+DSP 可视化模块：RGB、灰度图、DCT 系数域、低频保留重建图。
 
 示例：
   python visualize_spectrum.py --image imagenette2-160/val/n01440764/ILSVRC2012_val_00000293.JPEG
@@ -14,6 +14,12 @@ import pathlib
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+
+
+def to_rgb_array(image_path: pathlib.Path, size: int) -> np.ndarray:
+    img = Image.open(image_path).convert("RGB").resize((size, size))
+    arr = np.asarray(img, dtype=np.float32)
+    return arr
 
 
 def to_gray_array(image_path: pathlib.Path, size: int) -> np.ndarray:
@@ -84,31 +90,31 @@ def save_visualization(
     block_size: int,
     low_keep: int,
 ) -> None:
+    rgb = to_rgb_array(image_path, size=size)
     gray = to_gray_array(image_path, size=size)
-    fft_mag = fft_magnitude(gray)
     dct_coeff = block_dct(gray, block_size=block_size)
     dct_vis = np.log1p(np.abs(dct_coeff))
-
     low_dct = keep_low_freq(dct_coeff, block_size=block_size, keep=low_keep)
     recon = block_idct(low_dct, block_size=block_size)
     recon = np.clip(recon, 0, 255)
 
-    fig, axes = plt.subplots(1, 4, figsize=(18, 5))
-    axes[0].imshow(gray, cmap="gray")
-    axes[0].set_title("Original (Gray)")
-    axes[0].axis("off")
+    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
 
-    axes[1].imshow(fft_mag, cmap="magma")
-    axes[1].set_title("FFT Magnitude\n(log)", pad=10)
-    axes[1].axis("off")
+    axes[0, 0].imshow(rgb.astype(np.uint8))
+    axes[0, 0].set_title("RGB")
+    axes[0, 0].axis("off")
 
-    axes[2].imshow(dct_vis, cmap="inferno")
-    axes[2].set_title(f"Block DCT {block_size}x{block_size}\n(log)", pad=10)
-    axes[2].axis("off")
+    axes[0, 1].imshow(gray, cmap="gray")
+    axes[0, 1].set_title("Gray")
+    axes[0, 1].axis("off")
 
-    axes[3].imshow(recon, cmap="gray")
-    axes[3].set_title(f"IDCT after keeping\n{low_keep}x{low_keep} low-freq", pad=10)
-    axes[3].axis("off")
+    axes[1, 0].imshow(dct_vis, cmap="inferno")
+    axes[1, 0].set_title(f"DCT Coeff Domain ({block_size}x{block_size}, log)")
+    axes[1, 0].axis("off")
+
+    axes[1, 1].imshow(recon, cmap="gray")
+    axes[1, 1].set_title(f"Low-Freq Recon (keep {low_keep}x{low_keep})", pad=10)
+    axes[1, 1].axis("off")
 
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -91,16 +91,14 @@ python test.py
 
 ```bash
 python visualize_spectrum.py \
-  --image imagenette2-160/val/n01440764/ILSVRC2012_val_00000293.JPEG \
+  --image imagenette2-160/val/n02102040/ILSVRC2012_val_00008162.JPEG \
   --out outputs/spectrum_visualization.png
 ```
 
 输出图会展示：
 
 - 原图灰度图
-- FFT 幅度谱（log）
-- Block DCT 系数可视化（log）
-- 仅保留低频后的 IDCT 重建结果
+- 低频保留后重建图（处理后）
 
 ## 说明
 
