@@ -1,6 +1,9 @@
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
+.mplconfig/
+.idea/
 
 # dataset and generated artifacts
 *.pt
