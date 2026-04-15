@@ -1,6 +1,6 @@
 # PyTorch: Imagenette + DCT
 
-一个用于学习 PyTorch 训练流程和图像频域处理的小项目，包含：
+一个用 PyTorch 训练流程和图像频域处理的小项目，包含：
 
 - 基于 `imagenette2-160` 的简单 CNN 分类训练
 - 频域可视化工具（FFT 幅度谱、8x8 Block DCT、低频重建）
